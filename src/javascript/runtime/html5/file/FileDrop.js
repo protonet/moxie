@@ -45,18 +45,7 @@ define("moxie/runtime/html5/file/FileDrop", [
 
 					// Chrome 21+ accepts folders via Drag'n'Drop
 					if (e.dataTransfer.items && e.dataTransfer.items[0].webkitGetAsEntry) {
-						var entries = [];
-						Basic.each(e.dataTransfer.items, function(item) {
-							var entry = item.webkitGetAsEntry();
-							if (entry.isFile) {
-							  // file() fails on OSX when the file contains a special character (eg. umlaut)
-								entry.file = function(success) {
-									success(item.getAsFile());
-								};
-							}
-							entries.push(entry);
-						});
-						_readEntries(entries, function() {
+						_readItems(e.dataTransfer.items, function() {
 							comp.trigger("drop");
 						});
 					} else {
@@ -105,6 +94,32 @@ define("moxie/runtime/html5/file/FileDrop", [
 		function _isAcceptable(file) {
 			var ext = Mime.getFileExtension(file.name);
 			return !ext || !_allowedExts.length || Basic.inArray(ext, _allowedExts) !== -1;
+		}
+
+
+		function _readItems(items, cb) {
+			var entries = [];
+			Basic.each(items, function(item) {
+				var entry = item.webkitGetAsEntry();
+				// Address #998 (https://code.google.com/p/chromium/issues/detail?id=332579)
+				if (entry) {
+					// file() fails on OSX when the filename contains a special character (e.g. umlaut): see #61
+					if (entry.isFile) {
+						var file = item.getAsFile();
+						if (_isAcceptable(file)) {
+							_files.push(file);
+						}
+					} else {
+						entries.push(entry);
+					}
+				}
+			});
+
+			if (entries.length) {
+				_readEntries(entries, cb);
+			} else {
+				cb();
+			}
 		}
 
 

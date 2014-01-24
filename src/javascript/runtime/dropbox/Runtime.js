@@ -8,27 +8,30 @@
  * Contributing: http://www.plupload.com/contributing
  */
 
-/*global File:true */
+/*global window:true */
 
 /**
-Defines constructor for HTML5 runtime.
+Defines constructor for Dropbox runtime.
 
-@class moxie/runtime/html5/Runtime
+@class moxie/runtime/dropbox/Runtime
 @private
 */
-define("moxie/runtime/html5/Runtime", [
+define("moxie/runtime/dropbox/Runtime", [
+	"moxie/runtime/Runtime",
 	"moxie/core/utils/Basic",
 	"moxie/core/Exceptions",
-	"moxie/runtime/Runtime",
-	"moxie/core/utils/Env"
-], function(Basic, x, Runtime, Env) {
+	"moxie/core/utils/Env",
+	"moxie/core/utils/Loader"
+], function(Runtime, Basic, x, Env, Loader) {
 	
-	var type = "html5", extensions = {};
-	
-	function Html5Runtime(options) {
+	var type = "dropbox", extensions = {};
+
+
+	function Dropbox(options) {
 		var I = this
 		, Test = Runtime.capTest
 		, True = Runtime.capTrue
+		, script
 		;
 
 		var caps = Basic.extend({
@@ -38,15 +41,8 @@ define("moxie/runtime/html5/Runtime", [
 				},
 				display_media: Test(Env.can('create_canvas') || Env.can('use_data_uri_over32kb')),
 				do_cors: Test(window.XMLHttpRequest && 'withCredentials' in new XMLHttpRequest()),
-				drag_and_drop: Test(function() {
-					// this comes directly from Modernizr: http://www.modernizr.com/
-					var div = document.createElement('div');
-					// IE has support for drag and drop since version 5, but doesn't support dropping files from desktop
-					return (('draggable' in div) || ('ondragstart' in div && 'ondrop' in div)) && (Env.browser !== 'IE' || Env.version > 9);
-				}()),
-				filter_by_extension: Test(function() { // if you know how to feature-detect this, please suggest
-					return (Env.browser === 'Chrome' && Env.version >= 28) || (Env.browser === 'IE' && Env.version >= 10);
-				}()),
+				drag_and_drop: false,
+				filter_by_extension: True,
 				return_response_headers: True,
 				return_response_type: function(responseType) {
 					if (responseType === 'json' && !!window.JSON) { // we can fake this one even if it's not supported
@@ -59,18 +55,9 @@ define("moxie/runtime/html5/Runtime", [
 				resize_image: function() {
 					return I.can('access_binary') && Env.can('create_canvas');
 				},
-				select_file: function() {
-					return Env.can('use_fileinput') && window.File;
-				},
-				select_folder: function() {
-					return I.can('select_file') && Env.browser === 'Chrome' && Env.version >= 21;
-				},
-				select_multiple: function() {
-					// it is buggy on Safari Windows and iOS
-					return I.can('select_file') && 
-						!(Env.browser === 'Safari' && Env.os === 'Windows') && 
-						!(Env.os === 'iOS' && Env.verComp(Env.osVersion, "7.0.4", '<'));
-				},
+				select_file: true,
+				select_folder: false,
+				select_multiple: True,
 				send_binary_string: Test(window.XMLHttpRequest && (new XMLHttpRequest().sendAsBinary || (window.Uint8Array && window.ArrayBuffer))),
 				send_custom_headers: Test(window.XMLHttpRequest),
 				send_multipart: function() {
@@ -80,29 +67,27 @@ define("moxie/runtime/html5/Runtime", [
 				stream_upload: function(){
 					return I.can('slice_blob') && I.can('send_multipart');
 				},
-				summon_file_dialog: Test(function() { // yeah... some dirty sniffing here...
-					return (Env.browser === 'Firefox' && Env.version >= 4) ||
-						(Env.browser === 'Opera' && Env.version >= 12) ||
-						(Env.browser === 'IE' && Env.version >= 10) ||
-						!!~Basic.inArray(Env.browser, ['Chrome', 'Safari']);
-				}()),
+				summon_file_dialog: True,
 				upload_filesize: True
-			}, 
-			arguments[2]
+			}
 		);
 
 		Runtime.call(this, options, (arguments[1] || type), caps);
 
-
 		Basic.extend(this, {
-
 			init : function() {
-				this.trigger("Init");
+				script = Loader.loadScript("https://www.dropbox.com/static/api/1/dropins.js", function() {
+					I.trigger("Init");
+				}, {
+					"id": 'dropboxjs',
+					"data-app-key": options.dropbox.appKey
+				});					
 			},
 
 			destroy: (function(destroy) { // extend default destroy method
 				return function() {
 					destroy.call(I);
+					script.parenNode.removeChild(script); // remove script
 					destroy = I = null;
 				};
 			}(this.destroy))
@@ -111,7 +96,7 @@ define("moxie/runtime/html5/Runtime", [
 		Basic.extend(this.getShim(), extensions);
 	}
 
-	Runtime.addConstructor(type, Html5Runtime);
+	Runtime.addConstructor(type, Dropbox);
 
 	return extensions;
 });
